@@ -15,14 +15,14 @@ module CKB
     # @param order [String]
     # @param limit [Integer]
     # @param cursor [string]
-    def get_unspent_cells(search_key:, order: "asc", limit: CKB::Indexer::API::DEFAULT_LIMIT, cursor: nil, need_capacities: nil)
+    def get_unspent_cells(search_key:, order: "asc", limit: CKB::Indexer::API::DEFAULT_LIMIT, cursor: nil, need_capacities: nil, cell_tx_id: nil)
       results = []
       total_capacities = 0
       loop do
         liveCells = indexer_api.get_cells(search_key: search_key, order: order, limit: limit, after_cursor: cursor)
         liveCells.objects.each do |cell|
           next if skip_data_and_type && (cell.output_data != "0x" || !cell.output.type.nil?)
-
+          next if cell_tx_id.present? && cell_tx_id != cell.out_point.tx_hash
           results << cell
           total_capacities += cell.output.capacity
           break if need_capacities && total_capacities >= need_capacities
@@ -44,7 +44,7 @@ module CKB
     # @param order [String]
     # @param limit [Integer]
     # @param cursor [string]
-    def get_unspent_cells_by_search_keys(search_keys:, order: "asc", limit: CKB::Indexer::API::DEFAULT_LIMIT, cursor: nil, need_capacities: nil)
+    def get_unspent_cells_by_search_keys(search_keys:, order: "asc", limit: CKB::Indexer::API::DEFAULT_LIMIT, cursor: nil, need_capacities: nil, cell_tx_id: nil)
       total_capacities = 0
       outputs = []
       search_keys.map do |search_key|
@@ -53,7 +53,8 @@ module CKB
           order: order,
           limit: limit,
           cursor: cursor,
-          need_capacities: need_capacities && need_capacities - total_capacities
+          need_capacities: need_capacities && need_capacities - total_capacities,
+          cell_tx_id: cell_tx_id
         )
         outputs += result[:outputs]
         total_capacities += result[:total_capacities]
@@ -70,13 +71,13 @@ module CKB
     # @param capacity [Integer]
     # @param min_change_capacity [Integer]
     # @param fee [Integer]
-    def gather_inputs(search_keys, capacity, min_change_capacity, fee, order: "asc", limit: CKB::Indexer::API::DEFAULT_LIMIT, cursor: nil)
+    def gather_inputs(search_keys, capacity, min_change_capacity, fee, order: "asc", limit: CKB::Indexer::API::DEFAULT_LIMIT, cursor: nil, cell_tx_id: '')
       total_capacities = capacity + fee
       input_capacities = 0
       inputs = []
       witnesses = []
       get_unspent_cells_by_search_keys(search_keys: search_keys, order: order, limit: limit, cursor: cursor,
-                                       need_capacities: total_capacities + min_change_capacity)[:outputs].each do |cell|
+                                       need_capacities: total_capacities + min_change_capacity, cell_tx_id: cell_tx_id)[:outputs].each do |cell|
         input = Types::Input.new(
           previous_output: cell.out_point,
           since: 0

@@ -103,7 +103,6 @@ module CKB
         outputs << change_output
         outputs_data << change_output_data
       end
-
       tx = Types::Transaction.new(
         version: 0,
         cell_deps: [],
@@ -132,6 +131,75 @@ module CKB
       tx = generate_tx(target_address, capacity, data, key: key, fee: fee, from_block_number: from_block_number)
       send_transaction(tx, outputs_validator)
     end
+
+
+    def generate_mul_tx(target_addresses_and_capacity, data = "0x", key: nil, fee: 0, use_dep_group: true, from_block_number: 0, cell_tx_id: '')
+      key = get_key(key)
+      outputs = []
+      output_data =  data
+      outputs_data = []
+      sum_capacity = 0
+      target_addresses_and_capacity.each do |target_address,capacity|
+        parsed_address = AddressParser.new(target_address).parse
+        if parsed_address.address_type == "SHORTMULTISIG"
+          raise "Right now only supports sending to default single signed lock!"
+        end
+
+        outputs << Types::Output.new(
+          capacity: capacity,
+          lock: parsed_address.script
+        )
+        outputs_data << data
+        sum_capacity += capacity
+      end
+      change_output = Types::Output.new(
+        capacity: 0,
+        lock: lock
+      )
+      change_output_data = "0x"
+      i = gather_inputs(
+        sum_capacity,
+        outputs.sum{|output| output.calculate_min_capacity(data)},
+        change_output.calculate_min_capacity(change_output_data),
+        fee,
+        from_block_number: from_block_number,
+        cell_tx_id: cell_tx_id
+      )
+      input_capacities = i.capacities
+
+      # outputs = [output]
+      # outputs_data = [output_data]
+      change_output.capacity = input_capacities - (sum_capacity + fee)
+      if change_output.capacity.to_i.positive?
+        outputs << change_output
+        outputs_data << change_output_data
+      end
+      tx = Types::Transaction.new(
+        version: 0,
+        cell_deps: [],
+        inputs: i.inputs,
+        outputs: outputs,
+        outputs_data: outputs_data,
+        witnesses: i.witnesses
+      )
+
+      if use_dep_group
+        tx.cell_deps << Types::CellDep.new(out_point: api.secp_group_out_point, dep_type: "dep_group")
+      else
+        tx.cell_deps << Types::CellDep.new(out_point: api.secp_code_out_point, dep_type: "code")
+        tx.cell_deps << Types::CellDep.new(out_point: api.secp_data_out_point, dep_type: "code")
+      end
+
+      tx.sign(key)
+    end
+    # target_addresses_and_capacity {a.address => 1000 * 10**8,b.address => 333 * 10**8}
+    def send_multi_capacity(target_addresses_and_capacity, data = "0x", key: nil, fee: 0, outputs_validator: "default", from_block_number: 0, cell_tx_id: '')
+      tx = generate_mul_tx(target_addresses_and_capacity, data, key: key, fee: fee, from_block_number: from_block_number, cell_tx_id: cell_tx_id)
+      send_transaction(tx, outputs_validator)
+    end
+
+
+
 
     # @param capacity [Integer]
     # @param key [CKB::Key | String] Key or private key hex string
@@ -367,7 +435,7 @@ args = #{lock.args}
     # @param min_capacity [Integer]
     # @param min_change_capacity [Integer]
     # @param fee [Integer]
-    def gather_inputs(capacity, min_capacity, min_change_capacity, fee, from_block_number: 0)
+    def gather_inputs(capacity, min_capacity, min_change_capacity, fee, from_block_number: 0,cell_tx_id: '')
       raise "capacity cannot be less than #{min_capacity}" if capacity < min_capacity
 
       CellCollector.new(
@@ -377,7 +445,8 @@ args = #{lock.args}
         [search_key],
         capacity,
         min_change_capacity,
-        fee
+        fee,
+        cell_tx_id: cell_tx_id
       )
     end
 
