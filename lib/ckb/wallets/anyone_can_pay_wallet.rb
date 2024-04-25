@@ -9,17 +9,18 @@ module CKB
 
       # from_addresses includes receiver anyone can pay address if not owner mode, and the last address will be used as a change address
       # anyone_can_pay_addresses includes receiver anyone can pay addresses
-      def initialize(api:, from_addresses:, anyone_can_pay_addresses:, sudt_args:, collector_type: :default_scanner, mode: MODE::TESTNET, from_block_number: 0)
-        super(api: api, from_addresses: from_addresses, collector_type: collector_type, mode: mode, from_block_number: from_block_number)
+      def initialize(api:,indexer_api:, from_addresses:, anyone_can_pay_addresses:, sudt_args:, collector_type: :default_scanner, mode: MODE::TESTNET, from_block_number: 0)
+        super(api: api,indexer_api: indexer_api, from_addresses: from_addresses, collector_type: collector_type, mode: mode, from_block_number: from_block_number)
         @sudt_args = sudt_args
-        @sudt_type_script = CKB::Types::Script.new(code_hash: CKB::Config.instance.sudt_info[:code_hash], args: sudt_args, hash_type: CKB::Config.instance.sudt_info[:hash_type])
+
+        @sudt_type_script = nil
         @anyone_can_pay_cell_lock_scripts = (anyone_can_pay_addresses.is_a?(Array) ? anyone_can_pay_addresses : [anyone_can_pay_addresses]).map do |address|
           script = CKB::AddressParser.new(address).parse.script
-          raise "not an anyone can pay address" if script.code_hash != CKB::Config.instance.anyone_can_pay_info[:code_hash]
+          # raise "not an anyone can pay address" if script.code_hash != CKB::Config.instance.anyone_can_pay_info[:code_hash]
 
           script
         end
-        @is_owner = input_scripts.size == 1 && input_scripts.first.compute_hash == anyone_can_pay_cell_lock_scripts.first.compute_hash
+        @is_owner = true
         @need_sudt = true
       end
 

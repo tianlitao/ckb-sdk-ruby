@@ -14,13 +14,12 @@ module CKB
           end
         end
       end
-
       capacity_change_output_index = transaction.outputs.rindex { |output| output.capacity == 0 }
-      amount_change_output_index = is_owner ? capacity_change_output_index : transaction.outputs_data.rindex { |output_data| output_data == "0x#{'0' * 32}" }
+      amount_change_output_index = true ? capacity_change_output_index : transaction.outputs_data.rindex { |output_data| output_data == "0x#{'0' * 32}" }
 
       handle_anyone_can_pay_cells(anyone_can_pay_collector, contexts, fee_rate)
-      handle_sudt_cells(udt_collector, amount_change_output_index, contexts, fee_rate)
-      handle_normal_cells(capacity_collector, capacity_change_output_index, contexts, fee_rate)
+      # handle_sudt_cells(udt_collector, amount_change_output_index, contexts, fee_rate)
+      # handle_normal_cells(capacity_collector, capacity_change_output_index, contexts, fee_rate)
     end
 
     def enough_anyone_can_pay_cells?
@@ -45,6 +44,7 @@ module CKB
     def handle_normal_cells(capacity_collector, capacity_change_output_index, contexts, fee_rate)
       unless enough_capacity = enough_capacity?(capacity_change_output_index, fee_rate)
         capacity_collector.each do |cell_meta|
+
           lock_script = cell_meta.output.lock
           type_script = cell_meta.output.type
           next if !is_owner && (type_script || cell_meta.output_data_len > 0)

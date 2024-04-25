@@ -132,6 +132,20 @@ module CKB
       send_transaction(tx, outputs_validator)
     end
 
+    def self.sudt_amount!(output_data)
+      return 0 if output_data == "0x"
+      output_data_bin = CKB::Utils.hex_to_bin(output_data)
+      raise "Invalid sUDT amount" if output_data_bin.bytesize < 16
+
+      values = output_data_bin[0..15].unpack("Q<Q<")
+      (values[1] << 64) | values[0]
+    end
+
+    def self.generate_sudt_amount(sudt_amount)
+      values = [sudt_amount & 0xFFFFFFFFFFFFFFFF, (sudt_amount >> 64) & 0xFFFFFFFFFFFFFFFF]
+      CKB::Utils.bin_to_hex(values.pack("Q<Q<"))
+    end
+
 
     def generate_mul_tx(target_addresses_and_capacity, data = "0x", key: nil, fee: 0, use_dep_group: true, from_block_number: 0, cell_tx_id: '')
       key = get_key(key)
@@ -198,7 +212,146 @@ module CKB
       send_transaction(tx, outputs_validator)
     end
 
+    def generate_mul_anyone_can_pay_tx(target_addresses_and_capacity, data = "0x", key: nil, fee: 0, use_dep_group: true, from_block_number: 0, cell_tx_id: '')
+      key = get_key(key)
+      outputs = []
+      output_data =  data
+      outputs_data = []
+      sum_capacity = 0
+      target_addresses_and_capacity.each do |target_address,capacity|
+        parsed_address = AddressParser.new(target_address).parse
+        if parsed_address.address_type == "SHORTMULTISIG"
+          raise "Right now only supports sending to default single signed lock!"
+        end
+        parsed_address.script.code_hash = mode == CKB::MODE::TESTNET ? SystemCodeHash::ANYONE_CAN_PAY_CODE_HASH_ON_AGGRON : SystemCodeHash::ANYONE_CAN_PAY_CODE_HASH_ON_LINA
+        # parsed_address.script.args = self.blake160
+        outputs << Types::Output.new(
+          capacity: capacity,
+          lock: parsed_address.script
+        )
+        outputs_data << data
+        sum_capacity += capacity
+      end
+      change_output = Types::Output.new(
+        capacity: 0,
+        lock: lock
+      )
+      change_output_data = "0x"
+      i = gather_inputs(
+        sum_capacity,
+        outputs.sum{|output| output.calculate_min_capacity(data)},
+        change_output.calculate_min_capacity(change_output_data),
+        fee,
+        from_block_number: from_block_number,
+        cell_tx_id: cell_tx_id
+      )
+      input_capacities = i.capacities
 
+      # outputs = [output]
+      # outputs_data = [output_data]
+      change_output.capacity = input_capacities - (sum_capacity + fee)
+      if change_output.capacity.to_i.positive?
+        outputs << change_output
+        outputs_data << change_output_data
+      end
+      tx = Types::Transaction.new(
+        version: 0,
+        cell_deps: [],
+        inputs: i.inputs,
+        outputs: outputs,
+        outputs_data: outputs_data,
+        witnesses: i.witnesses
+      )
+
+      if use_dep_group
+        tx.cell_deps << Types::CellDep.new(out_point: api.secp_group_out_point, dep_type: "dep_group")
+      else
+        tx.cell_deps << Types::CellDep.new(out_point: api.secp_code_out_point, dep_type: "code")
+        tx.cell_deps << Types::CellDep.new(out_point: api.secp_data_out_point, dep_type: "code")
+      end
+
+      tx.sign(key)
+    end
+
+    def send_multi_anyone_can_pay(target_addresses_and_capacity, data = "0x", key: nil, fee: 0, outputs_validator: "default", from_block_number: 0, cell_tx_id: '')
+      tx = generate_mul_anyone_can_pay_tx(target_addresses_and_capacity, data, key: key, fee: fee, from_block_number: from_block_number, cell_tx_id: cell_tx_id)
+      send_transaction(tx, outputs_validator)
+    end
+
+
+    # @param target_address [String]
+    # @param capacity [Integer]
+    # @param data [String ] "0x..."
+    # @param key [CKB::Key | String] Key or private key hex string
+    # @param fee [Integer] transaction fee, in shannon
+    def generate_anyone_tx(target_address,anyone_address, capacity, data = "0x", key: nil, fee: 0, use_dep_group: true, from_block_number: 0)
+      key = get_key(key)
+      parsed_address = AddressParser.new(target_address).parse
+      parsed_anyone_address = AddressParser.new(anyone_address).parse
+
+      if parsed_address.address_type == "SHORTMULTISIG"
+        raise "Right now only supports sending to default single signed lock!"
+      end
+      output = Types::Output.new(
+        capacity: capacity,
+        lock: parsed_address.script
+      )
+      output_data = data
+
+      change_output = Types::Output.new(
+        capacity: 0,
+        lock: lock
+      )
+      change_output_data = "0x"
+      i = CellCollector.new(
+        indexer_api,
+        skip_data_and_type: @skip_data_and_type
+      ).gather_inputs(
+        [CKB::Indexer::Types::SearchKey.new(parsed_anyone_address.script, "lock")],
+        capacity,
+        change_output.calculate_min_capacity(change_output_data),
+        fee
+      )
+
+      input_capacities = i.capacities
+
+      outputs = [output]
+      outputs_data = [output_data]
+      change_output.capacity = input_capacities - (capacity + fee)
+      if change_output.capacity.to_i.positive?
+        outputs << change_output
+        outputs_data << change_output_data
+      end
+      tx = Types::Transaction.new(
+        version: 0,
+        cell_deps: [],
+        inputs: i.inputs,
+        outputs: outputs,
+        outputs_data: outputs_data,
+        witnesses: i.witnesses
+      )
+
+      if use_dep_group
+        tx.cell_deps << Types::CellDep.new(out_point: api.secp_group_out_point, dep_type: "dep_group")
+        tx.cell_deps << CKB::LockHandlers::AnyoneCanPayHandler.new(CKB::MODE::TESTNET ? SystemCodeHash::ANYONE_CAN_PAY_TX_HASH_ON_AGGRON : SystemCodeHash::ANYONE_CAN_PAY_TX_HASH_ON_LINA)
+      else
+        tx.cell_deps << Types::CellDep.new(out_point: api.secp_code_out_point, dep_type: "code")
+        tx.cell_deps << Types::CellDep.new(out_point: api.secp_data_out_point, dep_type: "code")
+      end
+      byebug
+
+      tx.sign(key)
+    end
+
+    # @param target_address [String]
+    # @param capacity [Integer]
+    # @param data [String] "0x..."
+    # @param key [CKB::Key | String] Key or private key hex string
+    # @param fee [Integer] transaction fee, in shannon
+    def send_anyone_capacity(target_address,anyone_address, capacity, data = "0x", key: nil, fee: 0, outputs_validator: "default", from_block_number: 0)
+      tx = generate_anyone_tx(target_address,anyone_address, capacity, data, key: key, fee: fee, from_block_number: from_block_number)
+      send_transaction(tx, outputs_validator)
+    end
 
 
     # @param capacity [Integer]
