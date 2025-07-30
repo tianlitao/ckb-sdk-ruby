@@ -50,7 +50,7 @@ module CKB
       if code_hash_index != CKB::Address::CODE_HASH_INDEX_ANYONE_CAN_PAY && CKB::Utils.hex_to_bin(args).bytesize != 20
         raise InvalidArgSizeError, "Short payload format address args bytesize must equal to 20"
       end
-      if spec != Bech32::Encoding::BECH32
+      if spec != CkbBech32::Encoding::BECH32
         raise InvalidEncodingError, "short address must use bech32 encoding"
       end
 
@@ -66,7 +66,7 @@ module CKB
       code_hash_size = 32
       raise InvalidCodeHashSizeError, "CodeHash bytesize must equal to 32" if data[1..-1].size < code_hash_size
 
-      if spec != Bech32::Encoding::BECH32
+      if spec != CkbBech32::Encoding::BECH32
         raise InvalidEncodingError, "ckb2019 format full address must use bech32 encoding"
       end
 
@@ -83,7 +83,7 @@ module CKB
       mode = parse_mode(decoded_prefix)
       code_hash_size = 32
       raise InvalidCodeHashSizeError, "CodeHash bytesize must equal to 32" if data[1..-1].size < code_hash_size
-      if spec != Bech32::Encoding::BECH32M
+      if spec != CkbBech32::Encoding::BECH32M
         raise InvalidEncodingError, "ckb2021 format full address must use bech32m encoding"
       end
       code_hash = "0x#{data.slice(1..code_hash_size).unpack('H*').first}"

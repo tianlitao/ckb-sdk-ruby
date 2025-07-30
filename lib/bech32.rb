@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-module Bech32
+module CkbBech32
 
   module Encoding
     BECH32 = 1
@@ -63,7 +63,7 @@ module Bech32
   # Compute the checksum values given hrp and data.
   def create_checksum(hrp, data, spec)
     values = expand_hrp(hrp) + data
-    const = (spec == Bech32::Encoding::BECH32M ? Bech32::BECH32M_CONST : 1)
+    const = (spec == CkbBech32::Encoding::BECH32M ? CkbBech32::BECH32M_CONST : 1)
     polymod = polymod(values + [0, 0, 0, 0, 0, 0]) ^ const
     (0..5).map{|i|(polymod >> 5 * (5 - i)) & 31}
   end

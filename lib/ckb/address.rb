@@ -59,7 +59,7 @@ module CKB
       warn "[DEPRECATION] `generate_short_payload_singlesig_address` is no longer recommended."
       return unless CKB::ScriptHashType::TYPE == script.hash_type && script.has_args? && SHORT_PAYLOAD_AVAILABLE_ARGS_LEN.include?(CKB::Utils.hex_to_bin(script.args).bytesize)
 
-      ConvertAddress.encode(prefix, short_payload(CODE_HASH_INDEX_SINGLESIG), Bech32::Encoding::BECH32)
+      ConvertAddress.encode(prefix, short_payload(CODE_HASH_INDEX_SINGLESIG), CkbBech32::Encoding::BECH32)
     end
 
     # Generates short payload format address
@@ -71,7 +71,7 @@ module CKB
       warn "[DEPRECATION] `generate_short_payload_multisig_address` is no longer recommended."
       return unless SystemCodeHash::SECP256K1_BLAKE160_MULTISIG_ALL_TYPE_HASH == script.code_hash
 
-      ConvertAddress.encode(prefix, short_payload(CODE_HASH_INDEX_MULTISIG_SIG), Bech32::Encoding::BECH32)
+      ConvertAddress.encode(prefix, short_payload(CODE_HASH_INDEX_MULTISIG_SIG), CkbBech32::Encoding::BECH32)
     end
 
     # Generates short payload format address
@@ -83,7 +83,7 @@ module CKB
       warn "[DEPRECATION] `generate_short_payload_anyone_can_pay_address` is no longer recommended."
       return unless [SystemCodeHash::ANYONE_CAN_PAY_CODE_HASH_ON_LINA, SystemCodeHash::ANYONE_CAN_PAY_CODE_HASH_ON_AGGRON].include?(script.code_hash)
 
-      ConvertAddress.encode(prefix, short_payload(CODE_HASH_INDEX_ANYONE_CAN_PAY), Bech32::Encoding::BECH32)
+      ConvertAddress.encode(prefix, short_payload(CODE_HASH_INDEX_ANYONE_CAN_PAY), CkbBech32::Encoding::BECH32)
     end
 
     private
@@ -104,10 +104,10 @@ module CKB
       case version
       when CKB::Address::Version::CKB2019
         format_type = CKB::ScriptHashType::TYPE == script.hash_type ? FULL_TYPE_FORMAT : FULL_DATA_FORMAT
-        CKB::ConvertAddress.encode(prefix, first_version_full_payload(format_type), Bech32::Encoding::BECH32)
+        CKB::ConvertAddress.encode(prefix, first_version_full_payload(format_type), CkbBech32::Encoding::BECH32)
       when CKB::Address::Version::CKB2021
         # payload = 0x00 | code_hash | hash_type | args
-        CKB::ConvertAddress.encode(prefix, current_version_full_payload(FULL_WITH_IDENTIFIER_FORMAT), Bech32::Encoding::BECH32M)
+        CKB::ConvertAddress.encode(prefix, current_version_full_payload(FULL_WITH_IDENTIFIER_FORMAT), CkbBech32::Encoding::BECH32M)
       else
         raise InvalidVersionError, "invalid address version"
       end

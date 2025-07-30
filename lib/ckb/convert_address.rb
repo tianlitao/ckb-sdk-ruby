@@ -30,11 +30,11 @@ module CKB
 
       def encode(hrp, data, spec)
         data = convert_bits(data.bytes, 8, 5)
-        Bech32.encode(hrp, data, spec)
+        CkbBech32.encode(hrp, data, spec)
       end
 
       def decode(bech)
-        hrp, data, spec = Bech32.decode(bech)
+        hrp, data, spec = CkbBech32.decode(bech)
         [hrp, convert_bits(data, 5, 8, false).map(&:chr).join, spec]
       end
     end
